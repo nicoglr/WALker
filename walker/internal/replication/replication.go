@@ -81,6 +81,9 @@ func (r *Runner) Run(ctx context.Context) error {
 		if !ok {
 			continue
 		}
+		if len(copyData.Data) == 0 {
+			continue
+		}
 
 		switch copyData.Data[0] {
 		case pglogrepl.PrimaryKeepaliveMessageByteID:
@@ -107,15 +110,17 @@ func (r *Runner) Run(ctx context.Context) error {
 					xld.WALStart, err, string(xld.WALData))
 			}
 
+			// endLSN is the WAL position immediately after this record.
+			// It is stamped on each event and used as the ack LSN.
+			// See Change.LSN doc for consumer dedup semantics.
+			endLSN := xld.WALStart + pglogrepl.LSN(len(xld.WALData))
+
 			for _, c := range changes {
-				c.LSN = xld.WALStart.String()
+				c.LSN = endLSN.String()
 				if err := r.sink.Write(ctx, c); err != nil {
 					return fmt.Errorf("sink.Write: %w", err)
 				}
 			}
-
-			// Advance LSN past this record and ack immediately.
-			endLSN := xld.WALStart + pglogrepl.LSN(len(xld.WALData))
 			if endLSN > confirmedFlushLSN {
 				confirmedFlushLSN = endLSN
 				if err := sendStatus(ctx, conn, confirmedFlushLSN); err != nil {

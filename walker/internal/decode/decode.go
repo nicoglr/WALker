@@ -3,22 +3,29 @@ package decode
 import (
 	"bytes"
 	"encoding/json"
+
+	"4gclinical.com/walker/internal/config"
 )
 
 // Change is one decoded CDC event.
 type Change struct {
-	Op     string                 // "insert" | "update" | "delete"
+	Op     string     // "insert" | "update" | "delete"
 	Schema string
 	Table  string
-	LSN    string                 // set by replication layer, not decode
-	Data   map[string]interface{} // new row / identity for delete
-	Old    map[string]interface{} // identity columns for update/delete (nil for insert)
+	// LSN is the WAL position immediately *after* this record (WALStart + len(WALData)).
+	// Consumers deduplicating on LSN must use strict greater-than (>) when comparing
+	// against a last-seen LSN, since this value points past the record — not to its
+	// start. Example: resume position is the LSN from the last-processed event;
+	// re-deliver condition is event.LSN > lastSeen (not >=).
+	LSN  string
+	Data config.Row // new row (INSERT/UPDATE) or PK only (DELETE)
+	Old  config.Row // PK of prior row (UPDATE/DELETE); nil for INSERT
 }
 
 // wal2json v2 on-wire types (unexported)
 type w2Column struct {
-	Name  string      `json:"name"`
-	Value interface{} `json:"value"`
+	Name  string `json:"name"`
+	Value any    `json:"value"`
 }
 
 type w2Change struct {
@@ -60,21 +67,21 @@ func Parse(raw []byte) ([]Change, error) {
 	// Data = columns (new row for I/U) or identity (D)
 	switch w.Action {
 	case "I", "U":
-		c.Data = columnsToMap(w.Columns)
+		c.Data = columnsToRow(w.Columns)
 	case "D":
-		c.Data = columnsToMap(w.Identity)
+		c.Data = columnsToRow(w.Identity)
 	}
 
 	// Old = identity for U/D
 	if (w.Action == "U" || w.Action == "D") && len(w.Identity) > 0 {
-		c.Old = columnsToMap(w.Identity)
+		c.Old = columnsToRow(w.Identity)
 	}
 
 	return []Change{c}, nil
 }
 
-func columnsToMap(cols []w2Column) map[string]interface{} {
-	m := make(map[string]interface{}, len(cols))
+func columnsToRow(cols []w2Column) config.Row {
+	m := make(config.Row, len(cols))
 	for _, col := range cols {
 		m[col.Name] = col.Value
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -24,7 +25,10 @@ func New(rdb *redis.Client, prefix, db string) *Sink {
 }
 
 // Write sends one change to the appropriate Redis stream.
-// Returns nil only when the XADD was acknowledged by Redis.
+// It retries with exponential backoff on transient Redis errors, blocking the
+// replication loop (and therefore WAL advancement) until the write succeeds or
+// ctx is cancelled. This implements the at-least-once back-pressure contract:
+// the LSN is never advanced past a change that has not been durably written.
 func (s *Sink) Write(ctx context.Context, c decode.Change) error {
 	dataJSON, err := json.Marshal(c.Data)
 	if err != nil {
@@ -54,5 +58,23 @@ func (s *Sink) Write(ctx context.Context, c decode.Change) error {
 		Values: values,
 	}
 
-	return s.rdb.XAdd(ctx, args).Err()
+	backoff := 100 * time.Millisecond
+	for {
+		err := s.rdb.XAdd(ctx, args).Err()
+		if err == nil {
+			return nil
+		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		slog.Warn("XADD failed, retrying", "stream", args.Stream, "err", err, "backoff", backoff)
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+	}
 }

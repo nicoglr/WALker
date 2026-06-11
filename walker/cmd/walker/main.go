@@ -14,7 +14,11 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("invalid configuration", "err", err)
+		os.Exit(1)
+	}
 
 	slog.Info("WALker starting",
 		"slot", cfg.Slot,
@@ -25,6 +29,7 @@ func main() {
 	rdb := redis.NewClient(&redis.Options{
 		Addr: cfg.RedisAddr,
 	})
+	defer rdb.Close()
 
 	s := sink.New(rdb, cfg.StreamPrefix, cfg.DB)
 	runner := replication.New(cfg.PGDSN, cfg.Slot, cfg.Tables, s, cfg.StatusInterval)
