@@ -40,6 +40,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		return err
 	}
 
+	// for logical replication postgres will use the slot's
+	// confirmed_flush_lsn, when present
 	const startLSN pglogrepl.LSN = 0
 
 	pluginArgs := []string{
@@ -136,6 +138,7 @@ func (r *Runner) ensureSlot(ctx context.Context, conn *pgconn.PgConn) error {
 		slog.Info("replication slot exists", "slot", r.slot)
 		return nil
 	}
+	// this should fail in prod since we won't have privileges!!
 	if _, err := pglogrepl.CreateReplicationSlot(ctx, conn, r.slot, "wal2json",
 		pglogrepl.CreateReplicationSlotOptions{Temporary: false}); err != nil {
 		return fmt.Errorf("create slot: %w", err)
