@@ -1,0 +1,12 @@
+{
+  "action": "U",
+  "schema": "public",
+  "table": "orders",
+  "columns": [
+    {"name": "id",     "type": "integer", "value": 42},
+    {"name": "status", "type": "text",    "value": "shipped"}
+  ],
+  "identity": [
+    {"name": "id", "type": "integer", "value": 42}
+  ]
+}

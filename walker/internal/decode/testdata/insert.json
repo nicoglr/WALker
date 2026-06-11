@@ -1,0 +1,10 @@
+{
+  "action": "I",
+  "schema": "public",
+  "table": "orders",
+  "columns": [
+    {"name": "id",     "type": "integer", "value": 42},
+    {"name": "status", "type": "text",    "value": "pending"},
+    {"name": "amount", "type": "numeric", "value": "9.99"}
+  ]
+}

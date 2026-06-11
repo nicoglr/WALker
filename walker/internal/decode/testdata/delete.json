@@ -1,0 +1,8 @@
+{
+  "action": "D",
+  "schema": "public",
+  "table": "orders",
+  "identity": [
+    {"name": "id", "type": "integer", "value": 42}
+  ]
+}
