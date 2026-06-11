@@ -1,0 +1,64 @@
+version: "3.9"
+
+services:
+
+  # ── Postgres (logical-replication on, like RDS) ────────────────────────────
+  postgres:
+    build: ./postgres
+    container_name: rp_postgres
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+      - -c
+      - max_wal_senders=10
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d mydb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: rp_redis
+    ports:
+      - "6380:6379"   # 6379 busy on host; connect uses container-internal port
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── WALker ─────────────────────────────────────────────────────────────────
+  walker:
+    build: ./walker
+    container_name: rp_walker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      WALKER_PG_DSN: "postgres://postgres:postgres@postgres:5432/mydb?replication=database"
+      WALKER_SLOT: walker_slot
+      WALKER_TABLES: "public.orders,public.products"
+      WALKER_REDIS_ADDR: "redis:6379"
+      WALKER_DB: "mydb"
+      WALKER_STREAM_PREFIX: "cdc."
+      WALKER_STATUS_INTERVAL: "10s"
+    restart: on-failure
+
+volumes:
+  pg_data:
