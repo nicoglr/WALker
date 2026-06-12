@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -87,18 +88,26 @@ func TestStreamPrefixTrailingDot(t *testing.T) {
 }
 
 func TestInvalidStatusInterval(t *testing.T) {
+	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_STATUS_INTERVAL", "1hour") // wrong format
 	_, err := config.Load()
 	if err == nil {
-		t.Error("expected error for invalid duration, got nil")
+		t.Fatal("expected error for invalid duration, got nil")
+	}
+	if !strings.Contains(err.Error(), "WALKER_STATUS_INTERVAL") {
+		t.Errorf("expected error to mention WALKER_STATUS_INTERVAL, got: %v", err)
 	}
 }
 
 func TestStatusIntervalBelowMinimum(t *testing.T) {
+	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_STATUS_INTERVAL", "1s") // below 10s minimum
 	_, err := config.Load()
 	if err == nil {
-		t.Error("expected error for sub-minimum interval, got nil")
+		t.Fatal("expected error for sub-minimum interval, got nil")
+	}
+	if !strings.Contains(err.Error(), "WALKER_STATUS_INTERVAL") {
+		t.Errorf("expected error to mention WALKER_STATUS_INTERVAL, got: %v", err)
 	}
 }
 
@@ -113,19 +122,27 @@ func TestInvalidSlotName(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 			t.Setenv("WALKER_SLOT", tc.slot)
 			_, err := config.Load()
 			if err == nil {
-				t.Errorf("expected error for slot %q, got nil", tc.slot)
+				t.Fatalf("expected error for slot %q, got nil", tc.slot)
+			}
+			if !strings.Contains(err.Error(), "WALKER_SLOT") {
+				t.Errorf("expected error to mention WALKER_SLOT, got: %v", err)
 			}
 		})
 	}
 }
 
 func TestEmptyTablesEntry(t *testing.T) {
+	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_TABLES", "public.foo,,public.bar") // double comma → empty entry
 	_, err := config.Load()
 	if err == nil {
-		t.Error("expected error for empty table entry, got nil")
+		t.Fatal("expected error for empty table entry, got nil")
+	}
+	if !strings.Contains(err.Error(), "WALKER_TABLES") {
+		t.Errorf("expected error to mention WALKER_TABLES, got: %v", err)
 	}
 }
