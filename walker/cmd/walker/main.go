@@ -31,7 +31,7 @@ func main() {
 	})
 	defer rdb.Close()
 
-	s := sink.New(rdb, cfg.StreamPrefix, cfg.DB)
+	s := sink.New(rdb, cfg.StreamPrefix, cfg.InstanceID)
 	runner := replication.New(cfg.PGDSN, cfg.Slot, cfg.Tables, s, cfg.StatusInterval)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

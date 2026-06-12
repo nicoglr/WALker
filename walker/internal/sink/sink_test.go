@@ -15,7 +15,7 @@ func newTestSink(t *testing.T) (*sink.Sink, *redis.Client) {
 	t.Helper()
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	s := sink.New(rdb, "cdc.", "testdb")
+	s := sink.New(rdb, "cdc", "test-instance")
 	return s, rdb
 }
 
@@ -31,7 +31,7 @@ func TestWriteInsert(t *testing.T) {
 		t.Fatalf("Write: %v", err)
 	}
 
-	entries, err := rdb.XRange(ctx, "cdc.testdb.orders", "-", "+").Result()
+	entries, err := rdb.XRange(ctx, "test-instance.cdc.orders", "-", "+").Result()
 	if err != nil {
 		t.Fatalf("XRange: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestWriteDelete(t *testing.T) {
 		t.Fatalf("Write: %v", err)
 	}
 
-	entries, err := rdb.XRange(ctx, "cdc.testdb.products", "-", "+").Result()
+	entries, err := rdb.XRange(ctx, "test-instance.cdc.products", "-", "+").Result()
 	if err != nil {
 		t.Fatalf("XRange: %v", err)
 	}

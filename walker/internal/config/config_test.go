@@ -11,7 +11,7 @@ func TestDefaults(t *testing.T) {
 	t.Setenv("WALKER_PG_DSN", "")
 	t.Setenv("WALKER_SLOT", "")
 	t.Setenv("WALKER_TABLES", "")
-	t.Setenv("WALKER_DB", "")
+	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_REDIS_ADDR", "")
 	t.Setenv("WALKER_STREAM_PREFIX", "")
 	t.Setenv("WALKER_STATUS_INTERVAL", "")
@@ -30,13 +30,13 @@ func TestDefaults(t *testing.T) {
 	if len(cfg.Tables) != 2 {
 		t.Fatalf("expected 2 tables, got %d", len(cfg.Tables))
 	}
-	if cfg.DB != "mydb" {
-		t.Errorf("unexpected DB: %s", cfg.DB)
+	if cfg.InstanceID != "test-instance" {
+		t.Errorf("unexpected InstanceID: %s", cfg.InstanceID)
 	}
 	if cfg.RedisAddr != "localhost:6380" {
 		t.Errorf("unexpected RedisAddr: %s", cfg.RedisAddr)
 	}
-	if cfg.StreamPrefix != "cdc." {
+	if cfg.StreamPrefix != "cdc" {
 		t.Errorf("unexpected StreamPrefix: %s", cfg.StreamPrefix)
 	}
 	if cfg.StatusInterval != 10*time.Second {
@@ -45,6 +45,7 @@ func TestDefaults(t *testing.T) {
 }
 
 func TestEnvOverride(t *testing.T) {
+	t.Setenv("WALKER_INSTANCE_ID", "my-instance")
 	t.Setenv("WALKER_SLOT", "my_slot")
 	t.Setenv("WALKER_TABLES", "public.foo,public.bar,public.baz")
 	t.Setenv("WALKER_STATUS_INTERVAL", "30s")
@@ -62,6 +63,26 @@ func TestEnvOverride(t *testing.T) {
 	}
 	if cfg.StatusInterval != 30*time.Second {
 		t.Errorf("expected 30s, got %v", cfg.StatusInterval)
+	}
+}
+
+func TestMissingInstanceID(t *testing.T) {
+	t.Setenv("WALKER_INSTANCE_ID", "")
+	_, err := config.Load()
+	if err == nil {
+		t.Error("expected error for missing WALKER_INSTANCE_ID, got nil")
+	}
+}
+
+func TestStreamPrefixTrailingDot(t *testing.T) {
+	t.Setenv("WALKER_INSTANCE_ID", "my-instance")
+	t.Setenv("WALKER_STREAM_PREFIX", "cdc.")
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.StreamPrefix != "cdc" {
+		t.Errorf("expected trailing dot stripped, got %q", cfg.StreamPrefix)
 	}
 }
 

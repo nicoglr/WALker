@@ -14,7 +14,7 @@ A useful side effect: a lean, in-house alternative to Debezium for a small set o
 Postgres ──(logical replication slot, wal2json)──▶ WALker ──(XADD)──▶ Redis Streams
 ```
 
-WALker opens a logical replication connection, starts receiving `XLogData` messages, decodes the wal2json payload, and writes each change to the appropriate Redis stream (`cdc.<db>.<table>`). It reports the confirmed LSN back to Postgres immediately after each successful Redis write — keeping the at-least-once duplicate window as small as possible.
+WALker opens a logical replication connection, starts receiving `XLogData` messages, decodes the wal2json payload, and writes each change to the appropriate Redis stream (`<instance>.cdc.<table>`, e.g. `bayer-17909.cdc.orders`). It reports the confirmed LSN back to Postgres immediately after each successful Redis write — keeping the at-least-once duplicate window as small as possible.
 
 ## Delivery semantics
 
@@ -41,9 +41,9 @@ Each Redis stream entry contains:
 | `WALKER_PG_DSN` | `postgres://postgres:postgres@localhost:5432/mydb` | Replication DSN |
 | `WALKER_SLOT` | `walker_slot` | Replication slot name |
 | `WALKER_TABLES` | `public.orders,public.products` | Tables to capture |
-| `WALKER_DB` | `mydb` | Database name (used in stream names) |
+| `WALKER_INSTANCE_ID` | *(required)* | Application instance ID — leading segment of every stream key (e.g. `bayer-17909`) |
 | `WALKER_REDIS_ADDR` | `localhost:6380` | Redis address |
-| `WALKER_STREAM_PREFIX` | `cdc.` | Stream name prefix |
+| `WALKER_STREAM_PREFIX` | `cdc` | Stream name prefix (trailing dot stripped automatically) |
 | `WALKER_STATUS_INTERVAL` | `10s` | Standby status update cadence (idle keepalive) |
 
 ## Running locally

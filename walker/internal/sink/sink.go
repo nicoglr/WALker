@@ -13,15 +13,15 @@ import (
 
 // Sink writes decoded changes to Redis Streams.
 type Sink struct {
-	rdb    *redis.Client
-	prefix string
-	db     string
+	rdb        *redis.Client
+	prefix     string
+	instanceID string
 }
 
 // New creates a Sink.
-// Stream key = prefix + db + "." + table  (e.g. "cdc.mydb.orders").
-func New(rdb *redis.Client, prefix, db string) *Sink {
-	return &Sink{rdb: rdb, prefix: prefix, db: db}
+// Stream key = instanceID + "." + prefix + "." + table  (e.g. "bayer-17909.cdc.orders").
+func New(rdb *redis.Client, prefix, instanceID string) *Sink {
+	return &Sink{rdb: rdb, prefix: prefix, instanceID: instanceID}
 }
 
 // Write sends one change to the appropriate Redis stream.
@@ -53,7 +53,7 @@ func (s *Sink) Write(ctx context.Context, c decode.Change) error {
 	}
 
 	args := &redis.XAddArgs{
-		Stream: s.prefix + s.db + "." + c.Table,
+		Stream: s.instanceID + "." + s.prefix + "." + c.Table,
 		ID:     "*",
 		Values: values,
 	}

@@ -18,7 +18,7 @@ type Config struct {
 	PGDSN          string
 	Slot           string
 	Tables         []string
-	DB             string
+	InstanceID     string
 	RedisAddr      string
 	StreamPrefix   string
 	StatusInterval time.Duration
@@ -57,13 +57,18 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("WALKER_SLOT: %w", err)
 	}
 
+	instanceID := getenv("WALKER_INSTANCE_ID", "")
+	if instanceID == "" {
+		return Config{}, fmt.Errorf("WALKER_INSTANCE_ID must be set")
+	}
+
 	return Config{
 		PGDSN:          getenv("WALKER_PG_DSN", "postgres://postgres:postgres@localhost:5432/mydb"),
 		Slot:           slot,
 		Tables:         tables,
-		DB:             getenv("WALKER_DB", "mydb"),
+		InstanceID:     instanceID,
 		RedisAddr:      getenv("WALKER_REDIS_ADDR", "localhost:6380"),
-		StreamPrefix:   getenv("WALKER_STREAM_PREFIX", "cdc."),
+		StreamPrefix:   strings.TrimSuffix(getenv("WALKER_STREAM_PREFIX", "cdc"), "."),
 		StatusInterval: interval,
 	}, nil
 }
