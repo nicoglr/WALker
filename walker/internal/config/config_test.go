@@ -48,7 +48,7 @@ func TestEnvOverride(t *testing.T) {
 func TestMissingInstanceID(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "")
 	_, err := config.Load()
-	require.ErrorContains(t, err, "WALKER_INSTANCE_ID")
+	require.ErrorIs(t, err, config.ErrMissingField)
 }
 
 func TestStreamPrefixTrailingDot(t *testing.T) {
@@ -63,14 +63,14 @@ func TestInvalidStatusInterval(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_STATUS_INTERVAL", "1hour")
 	_, err := config.Load()
-	require.ErrorContains(t, err, "WALKER_STATUS_INTERVAL")
+	require.ErrorIs(t, err, config.ErrInvalidValue)
 }
 
 func TestStatusIntervalBelowMinimum(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_STATUS_INTERVAL", "1s")
 	_, err := config.Load()
-	require.ErrorContains(t, err, "WALKER_STATUS_INTERVAL")
+	require.ErrorIs(t, err, config.ErrBelowMinimum)
 }
 
 func TestInvalidSlotName(t *testing.T) {
@@ -87,7 +87,7 @@ func TestInvalidSlotName(t *testing.T) {
 			t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 			t.Setenv("WALKER_SLOT", tc.slot)
 			_, err := config.Load()
-			require.ErrorContains(t, err, "WALKER_SLOT")
+			require.ErrorIs(t, err, config.ErrInvalidSlot)
 		})
 	}
 }
@@ -96,5 +96,5 @@ func TestEmptyTablesEntry(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_TABLES", "public.foo,,public.bar")
 	_, err := config.Load()
-	require.ErrorContains(t, err, "WALKER_TABLES")
+	require.ErrorIs(t, err, config.ErrEmptyTableEntry)
 }
