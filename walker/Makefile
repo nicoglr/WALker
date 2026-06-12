@@ -11,7 +11,7 @@ test:
 	go test ./... -v -count=1
 
 lint:
-	golangci-lint run ./...
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@latest run ./...
 
 up:
 	docker compose -f ../docker-compose.yml up -d
