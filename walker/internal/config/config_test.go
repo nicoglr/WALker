@@ -1,9 +1,11 @@
 package config_test
 
 import (
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"4gclinical.com/walker/internal/config"
 )
@@ -18,31 +20,15 @@ func TestDefaults(t *testing.T) {
 	t.Setenv("WALKER_STATUS_INTERVAL", "")
 
 	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if cfg.PGDSN != "postgres://postgres:postgres@localhost:5432/mydb" {
-		t.Errorf("unexpected PGDSN: %s", cfg.PGDSN)
-	}
-	if cfg.Slot != "walker_slot" {
-		t.Errorf("unexpected Slot: %s", cfg.Slot)
-	}
-	if len(cfg.Tables) != 2 {
-		t.Fatalf("expected 2 tables, got %d", len(cfg.Tables))
-	}
-	if cfg.InstanceID != "test-instance" {
-		t.Errorf("unexpected InstanceID: %s", cfg.InstanceID)
-	}
-	if cfg.RedisAddr != "localhost:6380" {
-		t.Errorf("unexpected RedisAddr: %s", cfg.RedisAddr)
-	}
-	if cfg.StreamPrefix != "cdc" {
-		t.Errorf("unexpected StreamPrefix: %s", cfg.StreamPrefix)
-	}
-	if cfg.StatusInterval != 10*time.Second {
-		t.Errorf("unexpected StatusInterval: %v", cfg.StatusInterval)
-	}
+	assert.Equal(t, "postgres://postgres:postgres@localhost:5432/mydb", cfg.PGDSN)
+	assert.Equal(t, "walker_slot", cfg.Slot)
+	assert.Len(t, cfg.Tables, 2)
+	assert.Equal(t, "test-instance", cfg.InstanceID)
+	assert.Equal(t, "localhost:6380", cfg.RedisAddr)
+	assert.Equal(t, "cdc", cfg.StreamPrefix)
+	assert.Equal(t, 10*time.Second, cfg.StatusInterval)
 }
 
 func TestEnvOverride(t *testing.T) {
@@ -52,63 +38,39 @@ func TestEnvOverride(t *testing.T) {
 	t.Setenv("WALKER_STATUS_INTERVAL", "30s")
 
 	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
-	if cfg.Slot != "my_slot" {
-		t.Errorf("expected my_slot, got %s", cfg.Slot)
-	}
-	if len(cfg.Tables) != 3 {
-		t.Fatalf("expected 3 tables, got %d", len(cfg.Tables))
-	}
-	if cfg.StatusInterval != 30*time.Second {
-		t.Errorf("expected 30s, got %v", cfg.StatusInterval)
-	}
+	assert.Equal(t, "my_slot", cfg.Slot)
+	assert.Len(t, cfg.Tables, 3)
+	assert.Equal(t, 30*time.Second, cfg.StatusInterval)
 }
 
 func TestMissingInstanceID(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "")
 	_, err := config.Load()
-	if err == nil {
-		t.Error("expected error for missing WALKER_INSTANCE_ID, got nil")
-	}
+	require.ErrorContains(t, err, "WALKER_INSTANCE_ID")
 }
 
 func TestStreamPrefixTrailingDot(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "my-instance")
 	t.Setenv("WALKER_STREAM_PREFIX", "cdc.")
 	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.StreamPrefix != "cdc" {
-		t.Errorf("expected trailing dot stripped, got %q", cfg.StreamPrefix)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "cdc", cfg.StreamPrefix)
 }
 
 func TestInvalidStatusInterval(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
-	t.Setenv("WALKER_STATUS_INTERVAL", "1hour") // wrong format
+	t.Setenv("WALKER_STATUS_INTERVAL", "1hour")
 	_, err := config.Load()
-	if err == nil {
-		t.Fatal("expected error for invalid duration, got nil")
-	}
-	if !strings.Contains(err.Error(), "WALKER_STATUS_INTERVAL") {
-		t.Errorf("expected error to mention WALKER_STATUS_INTERVAL, got: %v", err)
-	}
+	require.ErrorContains(t, err, "WALKER_STATUS_INTERVAL")
 }
 
 func TestStatusIntervalBelowMinimum(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
-	t.Setenv("WALKER_STATUS_INTERVAL", "1s") // below 10s minimum
+	t.Setenv("WALKER_STATUS_INTERVAL", "1s")
 	_, err := config.Load()
-	if err == nil {
-		t.Fatal("expected error for sub-minimum interval, got nil")
-	}
-	if !strings.Contains(err.Error(), "WALKER_STATUS_INTERVAL") {
-		t.Errorf("expected error to mention WALKER_STATUS_INTERVAL, got: %v", err)
-	}
+	require.ErrorContains(t, err, "WALKER_STATUS_INTERVAL")
 }
 
 func TestInvalidSlotName(t *testing.T) {
@@ -125,24 +87,14 @@ func TestInvalidSlotName(t *testing.T) {
 			t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 			t.Setenv("WALKER_SLOT", tc.slot)
 			_, err := config.Load()
-			if err == nil {
-				t.Fatalf("expected error for slot %q, got nil", tc.slot)
-			}
-			if !strings.Contains(err.Error(), "WALKER_SLOT") {
-				t.Errorf("expected error to mention WALKER_SLOT, got: %v", err)
-			}
+			require.ErrorContains(t, err, "WALKER_SLOT")
 		})
 	}
 }
 
 func TestEmptyTablesEntry(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
-	t.Setenv("WALKER_TABLES", "public.foo,,public.bar") // double comma → empty entry
+	t.Setenv("WALKER_TABLES", "public.foo,,public.bar")
 	_, err := config.Load()
-	if err == nil {
-		t.Fatal("expected error for empty table entry, got nil")
-	}
-	if !strings.Contains(err.Error(), "WALKER_TABLES") {
-		t.Errorf("expected error to mention WALKER_TABLES, got: %v", err)
-	}
+	require.ErrorContains(t, err, "WALKER_TABLES")
 }

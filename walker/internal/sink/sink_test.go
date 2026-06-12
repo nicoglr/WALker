@@ -7,6 +7,9 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"4gclinical.com/walker/internal/decode"
 	"4gclinical.com/walker/internal/sink"
 )
@@ -27,29 +30,21 @@ func TestWriteInsert(t *testing.T) {
 		Op: "insert", Schema: "public", Table: "orders", LSN: "0/1234",
 		Data: map[string]interface{}{"id": json.Number("1"), "status": "pending"},
 	}
-	if err := s.Write(ctx, c); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	require.NoError(t, s.Write(ctx, c))
 
 	entries, err := rdb.XRange(ctx, "test-instance.cdc.orders", "-", "+").Result()
-	if err != nil {
-		t.Fatalf("XRange: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
 	fields := entries[0].Values
-	if fields["op"] != "insert"    { t.Errorf("op: %q", fields["op"]) }
-	if fields["table"] != "orders"  { t.Errorf("table: %q", fields["table"]) }
-	if fields["lsn"] != "0/1234"   { t.Errorf("lsn: %q", fields["lsn"]) }
-	if fields["schema"] != "public" { t.Errorf("schema: %q", fields["schema"]) }
+	assert.Equal(t, "insert", fields["op"])
+	assert.Equal(t, "orders", fields["table"])
+	assert.Equal(t, "0/1234", fields["lsn"])
+	assert.Equal(t, "public", fields["schema"])
+	assert.Contains(t, fields, "streamed_at")
+
 	var data map[string]interface{}
-	if err := json.Unmarshal([]byte(fields["data"].(string)), &data); err != nil {
-		t.Errorf("data not valid JSON: %v", err)
-	}
-	if _, ok := fields["streamed_at"]; !ok {
-		t.Error("streamed_at field missing")
-	}
+	require.NoError(t, json.Unmarshal([]byte(fields["data"].(string)), &data), "data must be valid JSON")
 }
 
 func TestWriteDelete(t *testing.T) {
@@ -61,18 +56,13 @@ func TestWriteDelete(t *testing.T) {
 		Data: map[string]interface{}{"id": json.Number("99")},
 		Old:  map[string]interface{}{"id": json.Number("99")},
 	}
-	if err := s.Write(ctx, c); err != nil {
-		t.Fatalf("Write: %v", err)
-	}
+	require.NoError(t, s.Write(ctx, c))
 
 	entries, err := rdb.XRange(ctx, "test-instance.cdc.products", "-", "+").Result()
-	if err != nil {
-		t.Fatalf("XRange: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
 	fields := entries[0].Values
-	if fields["op"] != "delete"  { t.Errorf("op: %q", fields["op"]) }
-	if fields["old"] == ""       { t.Error("old field should be set for delete") }
+	assert.Equal(t, "delete", fields["op"])
+	assert.NotEmpty(t, fields["old"], "old field should be set for delete")
 }
