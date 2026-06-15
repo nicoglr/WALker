@@ -14,22 +14,37 @@ import (
 	"4gclinical.com/walker/internal/sink"
 )
 
-// Runner owns the replication connection and receive loop.
-type Runner struct {
+// replConn is the minimal interface the receive loop needs.
+// *pgconn.PgConn satisfies it.
+type replConn interface {
+	ReceiveMessage(ctx context.Context) (pgproto3.BackendMessage, error)
+}
+
+// statusSender is called to send a standby status update with the given LSN.
+type statusSender func(ctx context.Context, lsn pglogrepl.LSN) error
+
+// sinkWriter is the minimal interface the receive loop needs from the sink.
+// *sink.Sink satisfies it.
+type sinkWriter interface {
+	Write(ctx context.Context, c decode.Change) error
+}
+
+// Streamer owns the replication connection and receive loop.
+type Streamer struct {
 	dsn            string
 	slot           string
 	tables         []string
-	sink           *sink.Sink
+	sink           sinkWriter
 	statusInterval time.Duration
 }
 
-func New(dsn, slot string, tables []string, s *sink.Sink, statusInterval time.Duration) *Runner {
-	return &Runner{dsn: dsn, slot: slot, tables: tables, sink: s, statusInterval: statusInterval}
+func New(dsn, slot string, tables []string, s *sink.Sink, statusInterval time.Duration) *Streamer {
+	return &Streamer{dsn: dsn, slot: slot, tables: tables, sink: s, statusInterval: statusInterval}
 }
 
 // Run starts the replication loop. It blocks until ctx is cancelled or a fatal
 // error occurs. The caller should restart on error.
-func (r *Runner) Run(ctx context.Context) error {
+func (r *Streamer) Run(ctx context.Context) error {
 	conn, err := pgconn.Connect(ctx, r.dsn)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
@@ -56,12 +71,20 @@ func (r *Runner) Run(ctx context.Context) error {
 
 	slog.Info("replication started", "slot", r.slot)
 
+	sender := func(ctx context.Context, lsn pglogrepl.LSN) error {
+		return sendStatus(ctx, conn, lsn)
+	}
+	return r.receiveLoop(ctx, conn, sender)
+}
+
+// receiveLoop runs the message receive loop
+func (r *Streamer) receiveLoop(ctx context.Context, conn replConn, send statusSender) error {
 	var confirmedFlushLSN pglogrepl.LSN
 	statusDeadline := time.Now().Add(r.statusInterval)
 
 	for {
 		if time.Now().After(statusDeadline) {
-			if err := sendStatus(ctx, conn, confirmedFlushLSN); err != nil {
+			if err := send(ctx, confirmedFlushLSN); err != nil {
 				return fmt.Errorf("standby status: %w", err)
 			}
 			statusDeadline = time.Now().Add(r.statusInterval)
@@ -92,7 +115,7 @@ func (r *Runner) Run(ctx context.Context) error {
 				return fmt.Errorf("parse keepalive: %w", err)
 			}
 			if pkm.ReplyRequested {
-				if err := sendStatus(ctx, conn, confirmedFlushLSN); err != nil {
+				if err := send(ctx, confirmedFlushLSN); err != nil {
 					return err
 				}
 				statusDeadline = time.Now().Add(r.statusInterval)
@@ -123,7 +146,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			}
 			if endLSN > confirmedFlushLSN {
 				confirmedFlushLSN = endLSN
-				if err := sendStatus(ctx, conn, confirmedFlushLSN); err != nil {
+				if err := send(ctx, confirmedFlushLSN); err != nil {
 					return fmt.Errorf("ack LSN: %w", err)
 				}
 				statusDeadline = time.Now().Add(r.statusInterval)
@@ -132,7 +155,7 @@ func (r *Runner) Run(ctx context.Context) error {
 	}
 }
 
-func (r *Runner) ensureSlot(ctx context.Context, conn *pgconn.PgConn) error {
+func (r *Streamer) ensureSlot(ctx context.Context, conn *pgconn.PgConn) error {
 	res := conn.Exec(ctx,
 		"SELECT 1 FROM pg_replication_slots WHERE slot_name='"+r.slot+"'")
 	rows, err := res.ReadAll()
