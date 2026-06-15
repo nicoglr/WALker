@@ -9,11 +9,6 @@ import (
 	"unicode"
 )
 
-// Row is a map of column name → value for a single CDC row.
-// Values follow wal2json's natural JSON types; numeric/bigint values are
-// carried as json.Number (exact decimal text) to avoid float64 rounding.
-type Row map[string]any
-
 // Config holds all runtime configuration, loaded from environment variables.
 type Config struct {
 	PGDSN          string

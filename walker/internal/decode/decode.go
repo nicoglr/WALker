@@ -3,13 +3,16 @@ package decode
 import (
 	"bytes"
 	"encoding/json"
-
-	"4gclinical.com/walker/internal/config"
 )
+
+// Row is a map of column name → value for a single CDC row.
+// Values follow wal2json's natural JSON types; numeric/bigint values are
+// carried as json.Number (exact decimal text) to avoid float64 rounding.
+type Row map[string]any
 
 // Change is one decoded CDC event.
 type Change struct {
-	Op     string     // "insert" | "update" | "delete"
+	Op     string // "insert" | "update" | "delete"
 	Schema string
 	Table  string
 	// LSN is the WAL position immediately *after* this record (WALStart + len(WALData)).
@@ -18,8 +21,8 @@ type Change struct {
 	// start. Example: resume position is the LSN from the last-processed event;
 	// re-deliver condition is event.LSN > lastSeen (not >=).
 	LSN  string
-	Data config.Row // new row (INSERT/UPDATE) or PK only (DELETE)
-	Old  config.Row // PK of prior row (UPDATE/DELETE); nil for INSERT
+	Data Row // new row (INSERT/UPDATE) or PK only (DELETE)
+	Old  Row // PK of prior row (UPDATE/DELETE); nil for INSERT
 }
 
 // wal2json v2 on-wire types (unexported)
@@ -80,8 +83,8 @@ func Parse(raw []byte) ([]Change, error) {
 	return []Change{c}, nil
 }
 
-func columnsToRow(cols []w2Column) config.Row {
-	m := make(config.Row, len(cols))
+func columnsToRow(cols []w2Column) Row {
+	m := make(Row, len(cols))
 	for _, col := range cols {
 		m[col.Name] = col.Value
 	}
