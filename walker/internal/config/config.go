@@ -20,6 +20,21 @@ type Config struct {
 	StatusInterval time.Duration
 }
 
+// sanitizeForSlot converts an arbitrary string into a valid Postgres replication
+// slot name suffix: lowercase, with every character outside [a-z0-9_] replaced
+// by an underscore.
+func sanitizeForSlot(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLower(r) || unicode.IsDigit(r) || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
+}
+
 // Sentinel errors returned by Load and validateSlotName.
 // Callers may use errors.Is to identify specific failure kinds.
 var (
@@ -58,14 +73,17 @@ func Load() (Config, error) {
 		}
 	}
 
-	slot := getenv("WALKER_SLOT", "walker_slot")
-	if err := validateSlotName(slot); err != nil {
-		return Config{}, fmt.Errorf("WALKER_SLOT: %w", err)
-	}
-
 	instanceID := getenv("WALKER_INSTANCE_ID", "")
 	if instanceID == "" {
 		return Config{}, fmt.Errorf("WALKER_INSTANCE_ID must be set: %w", ErrMissingField)
+	}
+	sanitized := sanitizeForSlot(instanceID)
+	if strings.Trim(sanitized, "_") == "" {
+		return Config{}, fmt.Errorf("WALKER_INSTANCE_ID %q produces an empty slot suffix after sanitization: %w", instanceID, ErrInvalidValue)
+	}
+	slot := "walker_slot_" + sanitized
+	if len(slot) > 63 {
+		return Config{}, fmt.Errorf("derived slot name %q exceeds Postgres 63-character limit: %w", slot, ErrInvalidSlot)
 	}
 
 	return Config{
@@ -77,21 +95,6 @@ func Load() (Config, error) {
 		StreamPrefix:   strings.TrimSuffix(getenv("WALKER_STREAM_PREFIX", "cdc"), "."),
 		StatusInterval: interval,
 	}, nil
-}
-
-// validateSlotName enforces Postgres slot name rules: lowercase letters, digits,
-// and underscores only. This matches what Postgres itself accepts and prevents
-// any SQL injection risk when the name is embedded in query strings.
-func validateSlotName(s string) error {
-	if s == "" {
-		return fmt.Errorf("slot name must not be empty: %w", ErrInvalidSlot)
-	}
-	for _, r := range s {
-		if !unicode.IsLower(r) && !unicode.IsDigit(r) && r != '_' {
-			return fmt.Errorf("slot name %q contains invalid character %q (only [a-z0-9_] allowed): %w", s, r, ErrInvalidSlot)
-		}
-	}
-	return nil
 }
 
 func getenv(key, def string) string {

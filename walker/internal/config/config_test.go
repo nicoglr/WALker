@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 
 func TestDefaults(t *testing.T) {
 	t.Setenv("WALKER_PG_DSN", "")
-	t.Setenv("WALKER_SLOT", "")
 	t.Setenv("WALKER_TABLES", "")
 	t.Setenv("WALKER_INSTANCE_ID", "test-instance")
 	t.Setenv("WALKER_REDIS_ADDR", "")
@@ -23,7 +23,8 @@ func TestDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "postgres://postgres:postgres@localhost:5432/mydb", cfg.PGDSN)
-	assert.Equal(t, "walker_slot", cfg.Slot)
+	// Slot is derived from instance ID: "test-instance" → "test_instance"
+	assert.Equal(t, "walker_slot_test_instance", cfg.Slot)
 	assert.Len(t, cfg.Tables, 2)
 	assert.Equal(t, "test-instance", cfg.InstanceID)
 	assert.Equal(t, "localhost:6380", cfg.RedisAddr)
@@ -33,16 +34,54 @@ func TestDefaults(t *testing.T) {
 
 func TestEnvOverride(t *testing.T) {
 	t.Setenv("WALKER_INSTANCE_ID", "my-instance")
-	t.Setenv("WALKER_SLOT", "my_slot")
 	t.Setenv("WALKER_TABLES", "public.foo,public.bar,public.baz")
 	t.Setenv("WALKER_STATUS_INTERVAL", "30s")
 
 	cfg, err := config.Load()
 	require.NoError(t, err)
 
-	assert.Equal(t, "my_slot", cfg.Slot)
+	// Slot derived from instance ID
+	assert.Equal(t, "walker_slot_my_instance", cfg.Slot)
 	assert.Len(t, cfg.Tables, 3)
 	assert.Equal(t, 30*time.Second, cfg.StatusInterval)
+}
+
+func TestSlotDerivedFromInstanceID(t *testing.T) {
+	cases := []struct {
+		name       string
+		instanceID string
+		wantSlot   string
+	}{
+		{"simple", "myinstance", "walker_slot_myinstance"},
+		{"hyphen", "my-instance", "walker_slot_my_instance"},
+		{"uppercase", "MyInstance", "walker_slot_myinstance"},
+		{"mixed special", "My-Instance.v2", "walker_slot_my_instance_v2"},
+		{"digits", "inst123", "walker_slot_inst123"},
+		{"leading underscore", "_inst", "walker_slot__inst"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("WALKER_INSTANCE_ID", tc.instanceID)
+			cfg, err := config.Load()
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantSlot, cfg.Slot)
+		})
+	}
+}
+
+func TestSlotTooLong(t *testing.T) {
+	// "walker_slot_" is 12 chars; 52-char instance ID → 64 chars → over limit
+	longID := strings.Repeat("a", 52)
+	t.Setenv("WALKER_INSTANCE_ID", longID)
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalidSlot)
+}
+
+func TestDegenerateInstanceID(t *testing.T) {
+	// All-special-char IDs sanitize to all underscores → rejected
+	t.Setenv("WALKER_INSTANCE_ID", "---")
+	_, err := config.Load()
+	require.ErrorIs(t, err, config.ErrInvalidValue)
 }
 
 func TestMissingInstanceID(t *testing.T) {
@@ -71,25 +110,6 @@ func TestStatusIntervalBelowMinimum(t *testing.T) {
 	t.Setenv("WALKER_STATUS_INTERVAL", "1s")
 	_, err := config.Load()
 	require.ErrorIs(t, err, config.ErrBelowMinimum)
-}
-
-func TestInvalidSlotName(t *testing.T) {
-	cases := []struct {
-		name string
-		slot string
-	}{
-		{"uppercase", "MySlot"},
-		{"hyphen", "my-slot"},
-		{"space", "my slot"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("WALKER_INSTANCE_ID", "test-instance")
-			t.Setenv("WALKER_SLOT", tc.slot)
-			_, err := config.Load()
-			require.ErrorIs(t, err, config.ErrInvalidSlot)
-		})
-	}
 }
 
 func TestEmptyTablesEntry(t *testing.T) {
