@@ -78,6 +78,15 @@ func TestSlotTooLong(t *testing.T) {
 	require.ErrorIs(t, err, config.ErrInvalidSlot)
 }
 
+func TestSlotAtMaxLength(t *testing.T) {
+	// "walker_slot_" (12) + 51 'a's = 63 chars — exactly at the Postgres limit
+	maxID := strings.Repeat("a", 51)
+	t.Setenv("WALKER_INSTANCE_ID", maxID)
+	cfg, err := config.Load()
+	require.NoError(t, err)
+	assert.Len(t, cfg.Slot, 63)
+}
+
 func TestDegenerateInstanceID(t *testing.T) {
 	// All-special-char IDs sanitize to all underscores → rejected
 	t.Setenv("WALKER_INSTANCE_ID", "---")

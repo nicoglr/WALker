@@ -45,6 +45,10 @@ Each Redis stream entry contains:
 | `WALKER_STREAM_PREFIX` | `cdc` | Stream name prefix (trailing dot stripped automatically) |
 | `WALKER_STATUS_INTERVAL` | `10s` | Standby status update cadence (idle keepalive) |
 
+## Upgrading from an earlier version
+
+The `WALKER_SLOT` env var has been removed. The replication slot name is now always derived from `WALKER_INSTANCE_ID` (e.g. instance `my-app` → slot `walker_slot_my_app`). If you previously set `WALKER_SLOT` to a custom value, WALker will log a warning and ignore it. Your old Postgres replication slot will be orphaned and WALker will create a new one — this means replication restarts from the current WAL position and events written to the old slot since the last confirmed LSN may be re-emitted or skipped. Drop the old slot manually with `SELECT pg_drop_replication_slot('<old-slot-name>');` once you are satisfied.
+
 ## Running locally
 
 ```bash

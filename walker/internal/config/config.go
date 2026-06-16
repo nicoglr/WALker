@@ -49,6 +49,9 @@ const minStatusInterval = 10 * time.Second
 // Load reads config from environment variables and validates it.
 // Returns an error for any invalid or dangerous value.
 func Load() (Config, error) {
+	if os.Getenv("WALKER_SLOT") != "" {
+		fmt.Fprintln(os.Stderr, "WARNING: WALKER_SLOT is no longer supported and is being ignored; the replication slot name is now derived from WALKER_INSTANCE_ID")
+	}
 	rawInterval := getenv("WALKER_STATUS_INTERVAL", "10s")
 	interval, err := time.ParseDuration(rawInterval)
 	if err != nil {
