@@ -39,9 +39,8 @@ Each Redis stream entry contains:
 | Env var | Default | Description |
 |---|---|---|
 | `WALKER_PG_DSN` | `postgres://postgres:postgres@localhost:5432/mydb` | Replication DSN |
-| `WALKER_SLOT` | `walker_slot` | Replication slot name |
 | `WALKER_TABLES` | `public.orders,public.products` | Tables to capture |
-| `WALKER_INSTANCE_ID` | *(required)* | Application instance ID — leading segment of every stream key (e.g. `bayer-17909`) |
+| `WALKER_INSTANCE_ID` | *(required)* | Application instance ID — leading segment of every stream key (e.g. `bayer-17909`); also drives the replication slot name (`walker_slot_<sanitized-id>`) |
 | `WALKER_REDIS_ADDR` | `localhost:6380` | Redis address |
 | `WALKER_STREAM_PREFIX` | `cdc` | Stream name prefix (trailing dot stripped automatically) |
 | `WALKER_STATUS_INTERVAL` | `10s` | Standby status update cadence (idle keepalive) |

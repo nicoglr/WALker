@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"time"
-	"unicode"
 )
 
 // Config holds all runtime configuration, loaded from environment variables.
@@ -21,12 +20,12 @@ type Config struct {
 }
 
 // sanitizeForSlot converts an arbitrary string into a valid Postgres replication
-// slot name suffix: lowercase, with every character outside [a-z0-9_] replaced
-// by an underscore.
+// slot name suffix: lowercase ASCII, with every character outside [a-z0-9_]
+// (including non-ASCII Unicode) replaced by an underscore.
 func sanitizeForSlot(s string) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(s) {
-		if unicode.IsLower(r) || unicode.IsDigit(r) || r == '_' {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
 			b.WriteRune(r)
 		} else {
 			b.WriteRune('_')

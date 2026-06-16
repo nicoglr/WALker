@@ -58,6 +58,7 @@ func TestSlotDerivedFromInstanceID(t *testing.T) {
 		{"mixed special", "My-Instance.v2", "walker_slot_my_instance_v2"},
 		{"digits", "inst123", "walker_slot_inst123"},
 		{"leading underscore", "_inst", "walker_slot__inst"},
+		{"non-ascii", "my-ärger", "walker_slot_my__rger"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
